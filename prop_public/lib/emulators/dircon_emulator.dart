@@ -87,7 +87,7 @@ class DirconEmulator {
   /// trainer-app / trial / device-name callbacks.
   String get advertisementName => 'BikeControl';
 
-  bool processCharacteristic(String characteristic, Uint8List bytes) => false;
+  bool processCharacteristic(String characteristic, Uint8List bytes, {FitnessBikeDefinition? from}) => false;
 
   Future<void> startServer({
     required RetrofitMode mode,

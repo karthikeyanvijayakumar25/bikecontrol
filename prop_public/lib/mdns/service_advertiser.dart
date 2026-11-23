@@ -6,10 +6,11 @@
 // app compiles.
 
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:nsd/nsd.dart' as nsd;
 import 'package:prop/mdns/mdns_responder.dart';
+import 'package:prop/utils/advertised_service_registry.dart';
 
 class AdvertisedService {
   /// Instance name, e.g. 'BikeControl'.
@@ -72,13 +73,49 @@ abstract final class MdnsHostLabel {
   static String storedRandom() => '';
 }
 
-/// The OS-responder backend (via the `nsd` plugin). Stubbed here.
+/// The OS-responder backend (via the `nsd` plugin). The OS daemon owns the
+/// host records, so the advertised address is untracked.
 class NsdServiceAdvertiser implements ServiceAdvertiser {
   @override
   ValueListenable<String?> get advertisedAddress => ServiceAdvertiser.untrackedAddress;
 
   @override
-  Future<ServiceAdvertisement> register(AdvertisedService service) => throw UnimplementedError();
+  Future<ServiceAdvertisement> register(AdvertisedService service) async {
+    final registration = await nsd.register(
+      nsd.Service(
+        name: service.name,
+        type: service.type,
+        port: service.port,
+        txt: service.txt,
+      ),
+    );
+    // Recorded for diagnostics (Logs page, network self-test), which compare
+    // what we advertised with what the OS browser sees.
+    final record = AdvertisedServiceRegistry.instance.add(
+      name: service.name,
+      type: service.type,
+      port: service.port,
+      address: service.address.address,
+      txt: service.txt,
+    );
+    return _NsdServiceAdvertisement(registration, record);
+  }
+}
+
+class _NsdServiceAdvertisement implements ServiceAdvertisement {
+  final nsd.Registration _registration;
+  final AdvertisedRecord _record;
+  bool _unregistered = false;
+
+  _NsdServiceAdvertisement(this._registration, this._record);
+
+  @override
+  Future<void> unregister() async {
+    if (_unregistered) return;
+    _unregistered = true;
+    AdvertisedServiceRegistry.instance.remove(_record);
+    await nsd.unregister(_registration);
+  }
 }
 
 /// The in-process mDNS responder backend (desktop + Android). Stubbed here.
